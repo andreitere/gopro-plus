@@ -1,131 +1,172 @@
-# GoPro Plus Downloader
+# gopro-plus
 
-If you’re a GoPro Plus user, you’ve probably felt the frustration of trying to download
-your media in bulk, **only to be stopped by the 25-file limit**. This arbitrary restriction
-makes it tedious 😤😡 to migrate your content to other platforms like
-Google Drive, Dropbox, or your self-hosted NAS (e.g. Synology).
+A GoPro Plus media library toolkit: **sync** your cloud library into a local
+catalog, **download** only what you don't already have, filtered by **date
+range** and **content type** (video/photo), and inspect the catalog from the
+command line.
 
-GoPro Plus is an open-source project designed to enable users to interact with
-the GoPro Plus media library from the command line. This project aims to provide
-a convenient way to access and manage your GoPro media without the need
-to use the web interface.
+> Inspired by the original [gopro-plus](https://github.com/itsankoff/gopro-plus)
+> by [Ivaylo Tsankov](https://github.com/itsankoff) — this is a modernized
+> rewrite (uv, typed modules, database-backed sync). Full credit to the
+> original project for the GoPro API reverse engineering.
 
-* 🐳 Docker hub: https://hub.docker.com/r/itsankoff/gopro
-* 📝 Article: https://thetooth.io/blog/gopro-plus-downloader/
+## How it works
 
-
-## Usage (Docker environment)
-
-For `<AUTH_TOKEN>` and `<USER_ID>` check [Environment Variables](#environment-variables)
-
-`docker run --name gopro-downloader -e AUTH_TOKEN='<AUTH_TOKEN>' -e USER_ID='<USER_ID>' -v </path/to/download>:/app/download itsankoff/gopro:latest`
-
-or
-
-```
-docker run \
---name gopro-downloader
--e AUTH_TOKEN='<AUTH_TOKEN>' \
--e USER_ID='<USER_ID>' \
--v </path/to/download>:/app/download \
-itsankoff/gopro:latest
+```text
+gpp sync        → fetches your entire cloud library index (paginated)
+                  and upserts it into data/goproplus.db
+gpp download    → downloads only items with status "known" (not yet on disk),
+                  unpacks into data/downloads/<YYYY>/<MM>/ and marks them
+gpp list/stats  → query the local catalog, no network involved
 ```
 
-Supported Docker ENV variable options:
+Every downloaded item's state lives in the database, so re-runs are
+incremental and idempotent — nothing is downloaded twice.
 
-* `-e AUTH_TOKEN=<gopro-auth-token>` - (**required**) authentication token
-        obtained from GoPro Media Library website. See [Environment Variables](#environment-variables).
-* `-e USER_ID=<gopro-user-id>` - (**required**) user id
-        obtained from GoPro Media Library website. See [Environment Variables](#environment-variables).
-* `-e ACTION=<list|download>` - (*optional*) action to execute. The default is `download`.
-* `-e START_PAGE=<number>` - (*optional*) run the `<action>` from specific page
-        (GoPro Media Library API is paginated). The default `1`.
-* `-e PAGES=<number>` - (*optional*) run the `<action>` over the specified number of pages.
-        Default `1000000` which should mean max and will download the all cloud assets.
-* `-e PER_PAGE=<number>` - (*optional*) specify number of items per page. Default `15`.
-* `-e PROGRESS_MODE=<inline|newline|noline>` - (*optional*) specify printing mode
-        for download progress. Default `noline`.
+## Requirements
 
-## Environment Variables
+* Python 3.12+
+* [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
+* A GoPro Plus account
 
-To set up `AUTH_TOKEN` as an environment variable, you'll need to retrieve
-your JWT token by logging into your GoPro Plus media library account.
+## Installation
 
-1. Open a browser of choice (Firefox/Chrome is prefered, for Safari you need to enable Developer Tools)
-2. Go to [GoPro Plus Media Library](https://plus.gopro.com/media-library/)  (assuming that you are signed out. If you are not, please sing out)
-3. Open your browser's Developer Tools (Ctrl+Shift+I on most browsers or Cmd+Option+I on Mac).
-4. Go to the Network Tab on the Developer Tools console.
-5. In the Filter field enter - `user`
-6. Open the request and find the Cookies tab in the Sub Preview. You need to find the two mandatory cookies:
-    * `gp_access_token` - usually starts with `eyJhbGc...`. Copy this long sequence of gibberish characters into the env variable `AUTH_TOKEN`
-    * `gp_user_id` - the user ID. Copy this ID into the env variable `USER_ID`
-
-For Docker:
 ```bash
-docker run -e AUTH_TOKEN=<gopro-auth-token> -e USER_ID=<gopro-user-id> itsankoff/gopro:latest
+git clone <your-fork-url> && cd gopro-plus
+uv sync
 ```
 
-For Linux/macOS:
+## Authentication
+
+`AUTH_TOKEN` and `USER_ID` come from the cookies of the
+[GoPro media library](https://plus.gopro.com/media-library/) web app:
+
+1. Sign in to the media library and open DevTools → Network tab
+2. Filter requests by `user` and open any request's **Cookies** section
+3. Copy `gp_access_token` → `AUTH_TOKEN`, `gp_user_id` → `USER_ID`
+
+Then either export them in your shell or put them in `.envrc`/`.env`.
+
+## Commands
+
+### `gpp sync`
+
+Indexes your entire cloud library into the local database. Run this first,
+and re-run it to pick up new cloud items.
+
+| Option | Default | Description |
+|---|---|---|
+| `--per-page` | `30` | items per index page |
+| `--data-dir` | `./data` | where the database and downloads live |
+
+### `gpp download`
+
+Downloads missing items matching the filter. Safe to re-run anytime.
+
+| Option | Default | Description |
+|---|---|---|
+| `--since` | – | only items on/after this date: `YYYY-MM-DD`, or `today`, `yesterday`, `last-week`, `last-month`, `last-year` |
+| `--until` | – | only items on/before this date (`YYYY-MM-DD`, inclusive) |
+| `--type` | – | filter by content type: `video` or `photo` |
+| `--batch-size` | `100` | media ids per zip request (API limit is 100) |
+| `--retry-failed` | off | reset previously failed items so they are retried |
+| `--data-dir` | `./data` | data directory |
+
+Date and type filters combine freely:
+
 ```bash
-export AUTH_TOKEN="<gibberish_string_here>"
-export USER_ID="<user-id>`
+gpp download                                # everything not yet on disk
+gpp download --type video                   # all videos
+gpp download --since last-month             # last 30 days
+gpp download --since 2024-01-01 --until 2024-12-31 --type photo
 ```
 
-For Windows Command Prompt:
-```cmd
-set AUTH_TOKEN="<gibberish_string_here>"
-set USER_ID="<user-id>"
+Files land in `data/downloads/<year>/<month>/<day>/<video|photo>/<filename>`,
+keeping the original GoPro filenames. If the layout ever changes, `gpp
+organize` re-files your existing downloads (dry-run available).
+
+### `gpp list`
+
+Browse the local catalog (newest first). Never touches the network.
+
+| Option | Default | Description |
+|---|---|---|
+| `--since` / `--until` | – | same date filters as `download` |
+| `--type` | – | `video` or `photo` |
+| `--limit` | `50` | max rows to show |
+| `--data-dir` | `./data` | data directory |
+
+### `gpp organize`
+
+| Option | Default | Description |
+|---|---|---|
+| `--dry-run` | off | only show what would move |
+| `--data-dir` | `./data` | data directory |
+
+### `gpp reconcile`
+
+Re-links files already in the download tree to catalog rows (by filename),
+re-files them into the canonical layout, and marks them downloaded — for
+recovering after a database reset without re-downloading.
+
+| Option | Default | Description |
+|---|---|---|
+| `--dry-run` | off | only show what would be linked |
+| `--data-dir` | `./data` | data directory |
+
+### `gpp stats`
+
+Counts by media type and by download status (`known` / `downloaded` /
+`failed`), optionally filtered by date. Useful to answer "what's still
+missing?" before a download run.
+
+## Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `AUTH_TOKEN` | yes | GoPro `gp_access_token` cookie |
+| `USER_ID` | yes | GoPro `gp_user_id` cookie |
+| `GOPROPLUS_DATA_DIR` | no | overrides the data directory (default `./data`) |
+
+Or put them in a `.env` file in the project root (real environment
+variables always win over `.env` values):
+
+```dotenv
+AUTH_TOKEN=eyJhbGciOi...
+USER_ID=12345
 ```
 
-For Windows PowerShell:
-```sh
-$env:AUTH_TOKEN="<gibberish_string_here>"
-$env:USER_ID="<user-id>"
+## Docker
+
+```bash
+docker build -t goproplus .
+docker run --rm \
+  -e AUTH_TOKEN='<token>' -e USER_ID='<id>' \
+  -v /path/to/data:/data \
+  goproplus sync            # or: download, list, stats
 ```
 
-Once the `AUTH_TOKEN` and `USER_ID` is set, you can run the GoPro Plus application without needing to pass the token explicitly.
-Remember to replace `<gibberish_string_here>` with the actual token you copied from the console.
-By following these steps, you should be able to effectively manage your GoPro Plus media directly from your command line using GoPro Plus.
+## Development
 
+```bash
+uv sync          # set up the venv
+uv run pytest    # run tests
+```
 
-## Local Development Prerequisites
+The codebase is layered so it stays easy to extend — the CLI is a thin shell
+over services, which orchestrate a pure domain layer and I/O adapters:
 
-Before you can use GoPro Plus, you need to have the following installed:
+```text
+src/goproplus/
+├── domain/      pure models: MediaItem, MediaFilter, events
+├── infra/       adapters: gopro/ (API client+mappers), database/ (sqlite), storage, settings
+├── services/    use-cases: sync, download, catalog — shared by CLI and future web UI
+└── cli/         typer commands over the services
+```
 
-* `python3.10+`
-* `pip3`
-* `direnv` (*optional*)
-* `docker` (*optional*)
+Planned next: a small web UI (`goproplus.web`) served over the same catalog —
+the database schema and download layout already anticipate it.
 
+## License
 
-## Local Installation
-
-To run GoPro Plus locally on your machine, follow these steps:
-
-* `git clone https://github.com/itsankoff/gopro-plus.git`
-* `cd gopro-plus`
-* `python3 -m venv .venv`
-* `pip3 install -r requirements.txt`
-* (*optional*) `echo source .venv/bin/activate > .envrc # assuming direnv usage`
-* (*optional*) `echo "export AUTH_TOKEN='<gopro-auth-token (see below)>'" >> .envrc # assuming direnv usage`
-
-
-## Local Usage
-
-* `./gopro` - running the help section
-
-## Dev Tooling
-
-* `Makefile` - check for convenient shortcuts
-    * `build` - build a docker container
-    * `release` - build and release the docker image for multiple platforms.
-    * `run` - run as local docker container
-    * `stop` - stop docker container
-    * `logs` - show docker logs in a follow mode
-    * `clean` - stop and remove spawned containers
-
-* `Dockerfile` - base configuration for the docker image
-
-## Troubleshooting
-
-* Docker logs `docker logs gopro-downloader`
+MIT — see [LICENSE](LICENSE).

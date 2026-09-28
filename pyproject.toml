@@ -1,0 +1,41 @@
+[project]
+name = "goproplus"
+version = "2.0.0-alpha.1"
+description = "GoPro Plus media library sync, download and catalog tooling"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Ivaylo Tsankov" }]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27",
+    "typer>=0.12",
+    "rich>=13.0",
+    "sqlmodel>=0.0.22",
+    "python-dotenv>=1.2.3",
+]
+
+[project.scripts]
+gpp = "goproplus.cli.app:app"
+
+[project.optional-dependencies]
+web = [
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "respx>=0.21",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/goproplus"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

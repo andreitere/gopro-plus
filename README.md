@@ -9,6 +9,11 @@ command line.
 > by [Ivaylo Tsankov](https://github.com/itsankoff) — this is a modernized
 > rewrite (uv, typed modules, database-backed sync). Full credit to the
 > original project for the GoPro API reverse engineering.
+>
+> ℹ️ This rewrite was developed with AI assistance. Every layer was built
+> and reviewed carefully — the API contracts, database state machine, and
+> download logic were validated against real GoPro Plus behavior before
+> any code was trusted, and the test suite guards against regressions.
 
 ## How it works
 

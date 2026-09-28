@@ -5,8 +5,8 @@ catalog, **download** only what you don't already have, filtered by **date
 range** and **content type** (video/photo), and inspect the catalog from the
 command line.
 
-> Inspired by the original [gopro-plus](https://github.com/itsankoff/gopro-plus)
-> by [Ivaylo Tsankov](https://github.com/itsankoff) — this is a modernized
+> Forked from the original [gopro-plus](https://github.com/itsankoff/gopro-plus)
+> by [Ivaylo Tsankov](https://github.com/itsankoff) and modernized as a
 > rewrite (uv, typed modules, database-backed sync). Full credit to the
 > original project for the GoPro API reverse engineering.
 >
